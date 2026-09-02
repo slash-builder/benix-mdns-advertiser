@@ -1,0 +1,53 @@
+[package]
+name = "benix-mdns-advertiser"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "BenixOS box-side mDNS advertiser: publishes _benixos._tcp so Courier can discover a box without an account/hub round-trip. Thin glue over mdns-sd, no D-Bus, no C libs."
+repository = "https://github.com/slash-builder/benix-mdns-advertiser"
+keywords = ["mdns", "dns-sd", "benixos", "discovery"]
+categories = ["network-programming"]
+
+# Per messaging-architect's ruling (context/projects/benixos.md §9c): mDNS is
+# a discovery layer strictly beneath Hearth's presence/pairing wire contract
+# — it answers only "a BenixOS box is reachable here," nothing about claim
+# state or identity authoritatively. This crate is deliberately a thin
+# advertiser, not a general service: one background responder thread, one
+# service record, re-announced until the process is killed by dinit.
+#
+# Build-model note, following the same self-disclosure `benix-compositor`'s
+# own Cargo.toml uses: unlike the compositor (dynamically linked against
+# libdrm/libgbm/libinput/libseat at runtime, so it needs an in-tree Yocto
+# build against the target sysroot), this crate's only real dependencies are
+# pure-Rust plus libc socket syscalls (mdns-sd/if-addrs/socket2/hostname) —
+# the same static-artifact shape `qr-gateway`/`qr-cli` already proved compiles
+# clean to `x86_64-unknown-linux-musl` with zero code changes (§6i). This is
+# a clean Tier 2 case (devicenix-legacy/docs/build-model.md): build a musl
+# release artifact in this repo's own CI, meta-benixos's recipe just fetches
+# and installs the prebuilt binary + a dinit unit, matching qr-gateway's
+# pattern rather than the compositor's in-tree one.
+
+[[bin]]
+name = "benix-mdns-advertiser"
+path = "src/main.rs"
+
+[dependencies]
+# Pure safe Rust, no C libs, no D-Bus — the exact requirement DEV-17's
+# no-D-Bus lock puts on this crate. default-features = false drops the
+# "async" feature (this binary imposes no async runtime, matching the
+# ruling's "one background thread with a channel-based API" framing) and the
+# "logging" feature (mdns-sd's internal log::debug! traffic isn't wired to a
+# subscriber here in v1 — this crate's own tracing output is enough for a
+# thin advertiser; revisit if diagnosing on-target mDNS behavior needs it).
+mdns-sd = { version = "0.21.1", default-features = false }
+# LAN-local identifier generation only (see id.rs) — a placeholder shape
+# pending data-architect's Task #29 ruling, not this crate's own ID scheme.
+uuid = { version = "1.26.0", features = ["v4"] }
+# Portable hostname lookup for the mDNS host record (`<hostname>.local.`).
+hostname = "0.4.2"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[profile.release]
+lto = "thin"
+strip = true

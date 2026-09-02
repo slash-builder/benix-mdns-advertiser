@@ -1,0 +1,103 @@
+# OSS-facing CI mirror. The studio's primary CI is Jenkins
+# (https://jenkins.softsurve.com); this workflow runs the same checks
+# (fmt -> clippy -> test -> build) on every push and PR so a contributor
+# without internal Jenkins access still gets a green/red signal. Also runs a
+# real musl cross-compile: unlike benix-compositor, this crate has no native
+# library dependencies, so a plain `ubuntu-latest` runner with `musl-tools`
+# is enough to prove the on-target build actually works (same proof shape as
+# qr-gateway/qr-cli, benixos.md §6i) instead of just asserting it should.
+# Does not publish anything yet — see README.md's "Known gaps" section.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+
+  build:
+    name: build (host)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build
+        run: cargo build --release
+
+  musl:
+    name: build (x86_64-unknown-linux-musl)
+    runs-on: ubuntu-latest
+    # Real on-target proof, not just a host build: BenixOS itself is
+    # TCLIBC=musl. This is the same cross-compile shape qr-gateway/qr-cli
+    # already proved trivial for a pure-Rust binary with no native library
+    # dependencies (benixos.md §6i) — confirming it holds here too, not
+    # assuming it by analogy.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl cross toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-musl-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-musl-
+
+      - name: Build (musl, static)
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Confirm the binary is actually static (no dynamic libc)
+        run: |
+          file target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser
+          ldd target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser 2>&1 | grep -q "not a dynamic executable" \
+            && echo "Confirmed static." \
+            || (echo "Expected a static binary, got a dynamically-linked one" && exit 1)
