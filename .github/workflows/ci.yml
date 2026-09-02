@@ -96,8 +96,19 @@ jobs:
         run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Confirm the binary is actually static (no dynamic libc)
+        # `file`'s own musl-vs-dynamic classification, not `ldd` — ldd on a
+        # static-PIE musl binary run under a glibc host doesn't reliably
+        # print "not a dynamic executable" (it can misidentify a
+        # static-PIE ELF as dynamic since both use an ET_DYN e_type), so it
+        # is not a trustworthy check for this case. `file` reads the actual
+        # ELF program headers and correctly reports "static-pie linked".
         run: |
-          file target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser
-          ldd target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser 2>&1 | grep -q "not a dynamic executable" \
-            && echo "Confirmed static." \
-            || (echo "Expected a static binary, got a dynamically-linked one" && exit 1)
+          out="$(file -b target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser)"
+          echo "$out"
+          case "$out" in
+            *"statically linked"*|*"static-pie linked"*)
+              echo "Confirmed static." ;;
+            *)
+              echo "Expected a static/static-pie binary, got: $out"
+              exit 1 ;;
+          esac
