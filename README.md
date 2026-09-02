@@ -117,9 +117,15 @@ What was actually run, not just claimed:
 - The GitHub Actions CI in this repo (`.github/workflows/ci.yml`) runs
   `fmt`/`clippy`/`test`/`build` **and** a real `cargo build --release
   --target x86_64-unknown-linux-musl` on `ubuntu-latest` (which does have a
-  working musl cross-linker via `musl-tools`) — see the repo's own Actions
-  tab for the actual run result; do not take this README's word for green
-  over that.
+  working musl cross-linker via `musl-tools`). **Confirmed green, both
+  jobs, run `33577081795`**: the musl job produced a real
+  `static-pie linked` ELF (verified via `file(1)`'s own ELF classification,
+  not `ldd` — `ldd` misidentified the first attempt's genuinely-static
+  binary as dynamic, a bug in the check script that was found and fixed in
+  a follow-up commit, not a build problem; see the repo's commit history).
+  This is a real compiled musl binary from this exact source, not an
+  assertion — see the repo's own Actions tab for the current state; don't
+  take this README's word over that if they ever disagree.
 
 **Not verified, not claimed as done**:
 
