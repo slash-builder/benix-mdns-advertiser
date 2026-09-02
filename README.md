@@ -135,9 +135,14 @@ What was actually run, not just claimed:
   Courier's future browse side expects.
 - No dinit-unit / Yocto (`meta-benixos`) integration — this binary is not
   on any image yet. Deliberately out of scope for this pass (see below);
-  it's a real, separate next step, not folded in.
+  it's a real, separate next step, not folded in. **Update**: this is now
+  done in `slash-builder/core` (`meta-benixos/recipes-connectivity/
+  benix-mdns-advertiser`) — see that repo for the recipe and dinit unit.
 - No musl release artifact has ever been published anywhere (GitHub
   Releases or otherwise) — only compiled in CI, not packaged/tagged.
+  **Update**: fixed by `.github/workflows/release.yml` (see "Known gaps"
+  below) — check the repo's Releases tab for the actual current tag
+  `meta-benixos`'s recipe is pinned to.
 
 ## Known gaps / explicitly deferred, not silently dropped
 
@@ -150,11 +155,17 @@ What was actually run, not just claimed:
   auto-detect just won't find any usable interface yet if run too early —
   worth a real ordering decision once the recipe is written, not decided
   here).
-- **No GitHub Release / tag-triggered publish job.** `qr-gateway`/`qr-cli`
+- **No GitHub Release / tag-triggered publish job.** ~~`qr-gateway`/`qr-cli`
   went through the same two-step sequence (dinit units landed first
   against an existing artifact, a musl release target added second, PR
   #44) — this crate is at the first step's equivalent (code + CI proving
-  the musl build works), not yet the second.
+  the musl build works), not yet the second.~~ **Fixed** — `.github/
+  workflows/release.yml` builds the musl release artifact on any `v*.*.*`
+  tag push and publishes a GitHub Release (`benix-mdns-advertiser-linux-x64.tar.gz`
+  + `SHA256SUMS`), same tarball+checksum shape as `gateway-downloads`'
+  existing releases. See the repo's Releases tab for the actual published
+  artifact `meta-benixos`'s recipe fetches — don't take this README's word
+  over that if they disagree.
 - **`id`/`claimed` are both explicitly named placeholders above**, not
   quietly-shipped final decisions.
 

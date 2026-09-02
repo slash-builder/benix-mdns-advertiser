@@ -1,0 +1,89 @@
+# Tag-triggered publish job — the real gap README.md's "Known gaps" section
+# and `context/projects/benixos.md` §9f both name explicitly: CI (ci.yml)
+# proves a musl static-PIE binary builds clean, but nothing has ever
+# packaged or published one anywhere. Modeled on `quickring/gateway`'s own
+# `Jenkinsfile.release` -> `slash-builder/gateway-downloads` shape (tarball +
+# SHA256SUMS, one release per tag) rather than inventing a new convention —
+# this crate is small enough that its own repo doubles as its own
+# "-downloads" repo (no separate public-download-host split needed, unlike
+# gateway's private-source/public-binary split).
+#
+# `meta-benixos`'s fetch-recipe (recipes-connectivity/benix-mdns-advertiser)
+# consumes exactly this release's two assets: the tarball (by name+sha256)
+# and SHA256SUMS (for independent verification during recipe authoring).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: build musl release artifact + publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install musl cross toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Build (musl, release)
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Confirm the binary is actually static (no dynamic libc)
+        # Same `file(1)`-based check as ci.yml's musl job -- `ldd` is not a
+        # trustworthy static/dynamic classifier for a static-PIE ELF (both a
+        # true dynamic binary and a static-PIE one use ET_DYN), a real bug
+        # this repo already hit once (see commit 62bfa57).
+        run: |
+          out="$(file -b target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser)"
+          echo "$out"
+          case "$out" in
+            *"statically linked"*|*"static-pie linked"*)
+              echo "Confirmed static." ;;
+            *)
+              echo "Expected a static/static-pie binary, got: $out"
+              exit 1 ;;
+          esac
+
+      - name: Package release artifact
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          stage="$(mktemp -d)"
+          cp target/x86_64-unknown-linux-musl/release/benix-mdns-advertiser "$stage/"
+          cp README.md LICENSE "$stage/"
+          tarball="benix-mdns-advertiser-linux-x64.tar.gz"
+          tar -C "$stage" -czf "$tarball" benix-mdns-advertiser README.md LICENSE
+          sha256sum "$tarball" > SHA256SUMS
+          cat SHA256SUMS
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TARBALL=$tarball" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="Box-side mDNS advertiser (_benixos._tcp) static musl binary. Source: ${GITHUB_REPOSITORY}@${GITHUB_SHA}. Platform: linux/x86_64 (static-pie, musl). Unsigned."
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "benix-mdns-advertiser ${GITHUB_REF_NAME}" \
+            --notes "$notes" \
+            "${TARBALL}" \
+            "SHA256SUMS"
