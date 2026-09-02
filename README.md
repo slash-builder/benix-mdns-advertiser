@@ -46,6 +46,26 @@ code — noted, but going against the studio's own established two-tier
 precedent to save one `git init` would be the inconsistent choice, not the
 minimal one.
 
+**Repo visibility: public, not private.** This repo started private and was
+flipped to public during the `meta-benixos` Yocto-integration pass (2026-09-02)
+after a real, reproduced bug: `meta-benixos`'s fetch-recipe uses BitBake's
+anonymous `wget` fetcher, which cannot authenticate to a private GitHub
+repo's release assets at all (confirmed live: `wget ... failed with exit
+code 8, no output` in a real Jenkins build; independently reproduced with a
+plain anonymous `curl` against the exact release URL, which 404'd before the
+flip and 200'd after). This is the same reason `qr-gateway`'s own release
+artifact lives in the *public* `gateway-downloads` repo rather than the
+private `gateway` source repo — a prebuilt-artifact fetch-recipe needs a
+publicly fetchable URL, full stop. Unlike `gateway`, this crate's source and
+its release artifact are the same small repo (per the "small enough that a
+whole repo might look like overkill" note above), so the fix here was
+simpler: make the one repo public rather than splitting a second
+`-downloads` repo. Checked before flipping: no secrets anywhere in this
+repo's history, Apache-2.0 licensed, and the org's own public mission
+statement (`slash-builder.github.io`) already frames this org as "the
+open-source organization behind Hearth and BenixOS" — this crate fits that
+mission as-is.
+
 ## What it does
 
 One dinit-supervised binary, no subcommands, no config file:
