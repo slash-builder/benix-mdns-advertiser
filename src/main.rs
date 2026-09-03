@@ -11,8 +11,8 @@
 //!
 //! Three env vars, all optional, all with a documented placeholder default:
 //! - `BENIX_MDNS_STATE_DIR` — where the persisted LAN-local id lives
-//!   (default `/var/lib/benixos`). See `id.rs` for why that id's shape is
-//!   provisional.
+//!   (default `/var/lib/benixos`). See `id.rs` for the id's ruled shape and
+//!   lifetime (data-architect Task #29, `benixos.md` §9u).
 //! - `BENIX_MDNS_PORT` — the onboarding/connect port carried in the SRV
 //!   record (default `8420`, a placeholder — no onboarding endpoint exists
 //!   yet, pending gateway-pm's `qr-web` musl spike, §9d).
