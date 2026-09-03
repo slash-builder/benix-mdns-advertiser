@@ -9,9 +9,17 @@
 // explicitly: qr-gateway/qr-cli went through the same two-step sequence
 // (dinit units first against an existing artifact, a musl release target
 // added second, PR #44) — this crate is only at the first step's
-// equivalent. Not run for real against this project's actual Jenkins
-// instance from this environment (no Jenkins access here) — see the repo's
-// GitHub Actions run for the real, executed equivalent of the same checks.
+// equivalent.
+//
+// musl cross-compile stage runs `apt-get install musl-tools` inside its
+// own docker agent. Jenkins' Docker Pipeline plugin runs that container as
+// the host agent's own fixed uid (5005) by default, not root — confirmed
+// live against this exact stage (PR #3, build #1: `docker run -u 5005:5005
+// ... rust:1.90-trixie cat` then `apt-get update` -> "Permission denied"
+// on /var/lib/apt/lists/lock). Same root cause substrate-kit's own
+// Jenkinsfile already documents and already fixes for its own privileged
+// stage (`args '-u root:root'`) — applying the identical, already-
+// established fix here rather than a new pattern.
 def RUST_IMAGE = 'rust:1.90-trixie'
 
 pipeline {
@@ -45,7 +53,7 @@ pipeline {
     }
 
     stage('musl cross-compile') {
-      agent { docker { image RUST_IMAGE; reuseNode true } }
+      agent { docker { image RUST_IMAGE; args '-u root:root'; reuseNode true } }
       steps {
         sh '''
           apt-get update -qq

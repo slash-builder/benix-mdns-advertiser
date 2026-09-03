@@ -93,7 +93,7 @@ runtime (`default-features = false` on `mdns-sd` drops its optional
 
 | Field | Value | Status |
 |---|---|---|
-| `id` | a UUIDv4 generated at first run, persisted to `<state dir>/mdns-id` | **Provisional placeholder**, not a final design. `data-architect`'s Task #29 (the actual LAN-local-id shape, decoupled from the fabric `device_id`) is unstarted. This crate does *not* broadcast the raw fabric `device_id` — that was explicitly ruled out as a linkability/tracking beacon — but the UUID-persisted-to-disk shape here is this crate's own stand-in, not data-architect's ruling. Replace `src/id.rs`'s `load_or_create` once that ruling lands. |
+| `id` | a UUIDv4 generated at first run, persisted to `<state dir>/mdns-id` | **Ruled shape** (`data-architect` Task #29, `benixos.md` §9u): a per-install, opaque, random 128-bit token — a discovery *handle*, not an identity. Decoupled from the fabric `device_id` by rule (broadcasting that in clear would hand every LAN observer the box's permanent global fabric identity; deriving from it is impossible anyway — an unclaimed box has no fabric id yet). Stable for one claim/install, **must be regenerated on factory reset / unclaim** (a contract on those paths, not this crate — `load_or_create` regenerates automatically once `<state dir>/mdns-id` is cleared). See `src/id.rs`'s module doc for the full ruling. |
 | `claimed` | hardcoded `"0"` | **Advisory UI hint only, never authoritative.** `benix-claim-agent` (Task #23) doesn't exist as code yet, so there is no real claim state to read. See the `TODO(benix-claim-agent)` in `src/main.rs`. The box's own fail-closed claim-agent state machine, once built, is the sole gate — Courier must never treat this field as security-relevant. |
 | `pv` | `"1"` | The actual, real starting protocol/schema version for this TXT shape. Bump it if the field set or meaning changes. |
 
@@ -186,12 +186,21 @@ What was actually run, not just claimed:
   existing releases. See the repo's Releases tab for the actual published
   artifact `meta-benixos`'s recipe fetches — don't take this README's word
   over that if they disagree.
-- **`id`/`claimed` are both explicitly named placeholders above**, not
-  quietly-shipped final decisions.
+- **`id` is now the ruled shape** (data-architect Task #29, `benixos.md`
+  §9u), not a placeholder — its generation/persistence here is correct; the
+  only remaining half is a rotation-on-reset/unclaim contract on the
+  reset/unclaim paths (which don't exist yet). **`claimed` remains an
+  explicitly-named placeholder** (advisory hint, `benix-claim-agent` Task #23
+  not yet reading real state), not a quietly-shipped final decision.
 
 ## Open, routed rather than decided here
 
-- `data-architect` — the real shape of the `id` TXT field (Task #29).
+- ~~`data-architect` — the real shape of the `id` TXT field (Task #29).~~
+  **RULED** 2026-09-02 — `benixos.md` §9u (see the `id` table row above).
+- `benix-claim-agent` (`software-developer`) — wire the unclaim path to
+  delete `<state dir>/mdns-id`, and ensure any future factory-reset flow
+  wipes it (or the whole state dir), so a re-claimed box advertises a fresh
+  `id` per §9u's rotation-on-ownership-boundary rule.
 - `benixos-pm` — sequencing this into the Stage 1 headless backlog and the
   `meta-benixos` recipe/dinit-unit work.
 - `devops-engineer` — the dinit unit itself, its ordering against network

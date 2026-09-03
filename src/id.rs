@@ -1,16 +1,37 @@
 //! Persisted LAN-local identifier for this box's mDNS TXT record.
 //!
-//! **Provisional, not a final design.** `context/projects/benixos.md` §9c
-//! (messaging-architect's ruling) is explicit that the TXT `id` field must
-//! NOT be the raw fabric `device_id` — broadcasting that in clear multicast
-//! is a linkability/tracking beacon. The real shape of a LAN-local
-//! identifier decoupled from the fabric ID is routed to `data-architect`
-//! (Task #29), unstarted as of this writing. Until that ruling lands, this
-//! module uses a reasonable machine-id-style placeholder: a UUIDv4
-//! generated once at first run and persisted to disk, the same pattern
-//! `/etc/machine-id` uses elsewhere. **Do not treat this as the final `id`
-//! shape** — it exists so the advertiser has something concrete to ship
-//! today, not as this crate unilaterally deciding data-architect's call.
+//! **This is now the ruled shape, not a placeholder** — `data-architect`'s
+//! Task #29 ruling (`context/projects/benixos.md` §9u, 2026-09-02) settled
+//! the open question §9c routed here. The ruling, in short:
+//!
+//! - The `id` is a **per-install, opaque, random 128-bit token** — a
+//!   discovery *handle*, not an identity. UUIDv4 is the ruled encoding
+//!   (122 bits of randomness, collision-safe on a LAN, `/etc/machine-id`
+//!   class). It carries **no** relationship, derivable or otherwise, to the
+//!   fabric `device_id` — broadcasting that in clear multicast would hand
+//!   every LAN observer the box's permanent global fabric identity
+//!   (cross-domain correlation), so it stays excluded. Deriving the id from
+//!   the fabric id was rejected as *structurally impossible* anyway: a
+//!   clean-install box advertises while unclaimed, before any fabric
+//!   `device_id` exists — that identity is minted during the `TPair` claim
+//!   this discovery bootstraps.
+//! - **Lifetime: stable for one claim/install, regenerated on every
+//!   ownership-lifecycle boundary** (factory reset, unclaim/re-claim) — the
+//!   `/etc/machine-id` *lifetime*, not persist-forever. Carrying it across a
+//!   reset/unclaim would let a prior owner recognize the box under new
+//!   ownership. Within a claim it must stay stable (reboots, responder
+//!   restarts, IP changes) so Courier recognizes "the same box" across a
+//!   re-scan or a mid-pairing restart.
+//!
+//! `load_or_create` below already implements the correct *generation and
+//! per-install persistence* (regenerate when the file is absent, stable
+//! while present). The rotation-on-boundary half is a **contract on the
+//! reset/unclaim paths, not on this crate**: a factory reset MUST wipe
+//! `<state_dir>/mdns-id` (wiping `/var/lib/benixos` satisfies it for free),
+//! and `benix-claim-agent`'s unclaim path MUST delete `<state_dir>/mdns-id`
+//! so the next claim advertises a fresh handle. Those paths don't exist yet
+//! (see §9u's routed open items); this module needs no change for them —
+//! it regenerates automatically once the file is gone.
 
 use std::fs;
 use std::io;
