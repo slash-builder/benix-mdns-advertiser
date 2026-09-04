@@ -1,6 +1,6 @@
 [package]
 name = "benix-mdns-advertiser"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "BenixOS box-side mDNS advertiser: publishes _benixos._tcp so Courier can discover a box without an account/hub round-trip. Thin glue over mdns-sd, no D-Bus, no C libs."
