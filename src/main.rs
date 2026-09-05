@@ -162,4 +162,7 @@ fn main() {
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
+    // mdns-sd's internal `log` crate output is otherwise invisible: bridge it
+    // into the same `tracing` subscriber so RUST_LOG=debug surfaces it too.
+    let _ = tracing_log::LogTracer::init();
 }

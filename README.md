@@ -86,8 +86,13 @@ One dinit-supervised binary, no subcommands, no config file:
 Mechanism is exactly `messaging-architect`'s ruling: `mdns-sd` (crates.io,
 pure safe Rust, no C libs, no D-Bus — required by DEV-17's no-D-Bus lock),
 one background responder thread, channel-based API, no imposed async
-runtime (`default-features = false` on `mdns-sd` drops its optional
-`async`/`logging` features — this binary doesn't need either).
+runtime (`default-features = false` on `mdns-sd` drops its optional `async`
+feature — this binary doesn't need it). **`logging` is re-enabled** (v1
+shipped with it dropped, which turned out to make `mdns-sd`'s own internal
+diagnostics unconditionally compiled-out no-ops, not just filtered at a log
+level — see "What was actually verified" below); `tracing-log` bridges that
+`log`-crate output into this crate's own `tracing` subscriber so
+`RUST_LOG=debug` surfaces it.
 
 ### TXT record — exactly three fields, per the ruling, no more
 
@@ -114,7 +119,7 @@ That's messaging-architect's explicit line, not a decision made here.
 | `BENIX_MDNS_STATE_DIR` | `/var/lib/benixos` | Where the persisted LAN-local id lives. |
 | `BENIX_MDNS_PORT` | `8420` | Placeholder onboarding port, carried in the SRV record. |
 | `BENIX_MDNS_INSTANCE` | this box's hostname | Override the mDNS instance name. |
-| `RUST_LOG` | `info` | Standard `tracing-subscriber` env filter. |
+| `RUST_LOG` | `info` | Standard `tracing-subscriber` env filter. `debug` now also surfaces `mdns-sd`'s own internal diagnostics (via `tracing-log`), not just this crate's spans. |
 
 ## What was actually verified, and how
 
@@ -146,6 +151,31 @@ What was actually run, not just claimed:
   This is a real compiled musl binary from this exact source, not an
   assertion — see the repo's own Actions tab for the current state; don't
   take this README's word over that if they ever disagree.
+
+- **Real on-target diagnosis (this pass), root cause found and it is not in
+  this crate.** VM 260 (the real BenixOS test target) showed the advertiser
+  reaching `[ OK ]` in dinit, joining the mDNS multicast group (real IGMP
+  report observed), yet never transmitting a single mDNS packet. The leading
+  hypothesis going into this pass — `mdns-sd`'s `set_multicast_if_v4()`
+  silently failing with `EADDRNOTAVAIL` on a `dhcp-eth0` timing race
+  (matching upstream's draft `keepsimple1/mdns-sd` PR #415) — was
+  **disconfirmed** by live reproduction: the exact pinned `mdns-sd 0.21.1`
+  does *not* call `set_multicast_if_v4()` on its shared send socket at all
+  (that code path, `_new_socket_bind`, is dead outside the crate's own unit
+  tests); its actual periodic `check_ip_changes()` (5s default interval)
+  correctly picks up a late-arriving IPv4 address and transmits real
+  multicast packets within ~7s in a reproduced network-namespace test using
+  this exact binary. **The real root cause, confirmed live on VM 260**: the
+  guest never completes DHCP at all — `udhcpc` repeatedly sends `DISCOVER`
+  from `0.0.0.0`, the LAN's real DHCP server replies with a correctly
+  MAC-addressed unicast `OFFER` (xid-matched, confirmed via `tcpdump` on
+  both `vmbr0` and `tap260i0`), but that reply never reaches the guest
+  through Proxmox's bridge/tap path. `dhcp-eth0`'s dinit unit still reports
+  `[ OK ]` because it's a long-running `udhcpc -f` process that's
+  "started" the moment it launches, regardless of whether it ever obtains a
+  lease — so this is invisible from dinit's own service state. This is a
+  host-networking delivery problem, not an application bug; routed to
+  `devops-engineer` (Proxmox/bridge/tap-device territory), not fixed here.
 
 **Not verified, not claimed as done**:
 
