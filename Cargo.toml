@@ -35,11 +35,23 @@ path = "src/main.rs"
 # Pure safe Rust, no C libs, no D-Bus — the exact requirement DEV-17's
 # no-D-Bus lock puts on this crate. default-features = false drops the
 # "async" feature (this binary imposes no async runtime, matching the
-# ruling's "one background thread with a channel-based API" framing) and the
-# "logging" feature (mdns-sd's internal log::debug! traffic isn't wired to a
-# subscriber here in v1 — this crate's own tracing output is enough for a
-# thin advertiser; revisit if diagnosing on-target mDNS behavior needs it).
-mdns-sd = { version = "0.21.1", default-features = false }
+# ruling's "one background thread with a channel-based API" framing).
+#
+# "logging" is explicitly re-enabled here, reversing the original v1 call to
+# drop it: without it, every mdns-sd::log::{debug,error,trace,warn}! call in
+# the crate compiles to a no-op (see mdns-sd's src/lib.rs — the macros are
+# empty under `#[cfg(not(feature = "logging"))]`), which made a real,
+# confirmed-live send-path investigation on VM 260 impossible — RUST_LOG=debug
+# showed nothing from mdns-sd regardless of level, because there was nothing
+# to show. This is not a hypothetical concern: it directly blocked root-causing
+# a real "advertiser joins the multicast group but never transmits" bug this
+# session. `tracing-log` below bridges the now-real `log` output into this
+# crate's existing `tracing` subscriber, so `RUST_LOG=debug` actually works.
+mdns-sd = { version = "0.21.1", default-features = false, features = ["logging"] }
+# Bridges mdns-sd's internal `log` crate output into the `tracing` subscriber
+# already wired up below, so `RUST_LOG=debug` actually surfaces mdns-sd's own
+# diagnostics instead of the log statements being compiled out entirely.
+tracing-log = "0.2"
 # LAN-local identifier generation only (see id.rs) — a placeholder shape
 # pending data-architect's Task #29 ruling, not this crate's own ID scheme.
 uuid = { version = "1.26.0", features = ["v4"] }

@@ -18,6 +18,7 @@ dependencies = [
  "hostname",
  "mdns-sd",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
  "uuid",
 ]
@@ -161,6 +162,7 @@ dependencies = [
  "fastrand",
  "flume",
  "if-addrs",
+ "log",
  "mio",
  "socket-pktinfo",
  "socket2",
